@@ -46,6 +46,15 @@ const initialState: InventoryState = {
   selectedItemId: seedItemId,
 };
 
+const emptyInventoryState = (): InventoryState => ({
+  schemaVersion: SCHEMA_VERSION,
+  locations: {},
+  containers: {},
+  items: {},
+  recentItemIds: [],
+  selectedItemId: undefined,
+});
+
 const collectContainerTree = (state: InventoryState, rootId: ID) => {
   const queue = [rootId];
   const collected = new Set<ID>();
@@ -79,7 +88,7 @@ const inventorySlice = createSlice({
   name: "inventory",
   initialState,
   reducers: {
-    resetInventory: () => initialState,
+    resetInventory: () => emptyInventoryState(),
     addLocation: (state, action: PayloadAction<{ name: string; icon?: string }>) => {
       const name = toTitleCaseWords(trimName(action.payload.name));
       if (!name) return;
@@ -147,6 +156,7 @@ const inventorySlice = createSlice({
         category: string;
         qty: number;
         unit: string;
+        expiryDate?: string;
         imageUri?: string;
       }>
     ) => {
@@ -160,6 +170,7 @@ const inventorySlice = createSlice({
         category: action.payload.category,
         qty: safeQty,
         unit: action.payload.unit,
+        expiryDate: action.payload.expiryDate,
         imageUri: action.payload.imageUri,
         createdAt: nowIso(),
         updatedAt: nowIso(),
@@ -175,6 +186,7 @@ const inventorySlice = createSlice({
         qty: number;
         unit: string;
         notes?: string;
+        expiryDate?: string;
         imageUri?: string;
       }>
     ) => {
@@ -187,6 +199,7 @@ const inventorySlice = createSlice({
       item.qty = Math.max(action.payload.qty, 0);
       item.unit = action.payload.unit;
       item.notes = action.payload.notes;
+      item.expiryDate = action.payload.expiryDate;
       if (action.payload.imageUri !== undefined) {
         item.imageUri = action.payload.imageUri;
       }
