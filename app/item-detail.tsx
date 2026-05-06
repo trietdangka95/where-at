@@ -1,5 +1,5 @@
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Alert, Image, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { ChevronLeft, Pencil } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -7,26 +7,30 @@ import * as ImagePicker from "expo-image-picker";
 
 import { AppButton } from "../src/components/AppButton";
 import { EmptyState } from "../src/components/EmptyState";
+import { FadeSlideIn } from "../src/components/FadeSlideIn";
+import { useToast } from "../src/components/ToastProvider";
 import { useInventory } from "../src/hooks/useInventory";
+import { useI18n } from "../src/i18n/LanguageProvider";
 import { colors } from "../src/theme/colors";
 
 export default function ItemDetailScreen() {
   const router = useRouter();
+  const { showToast } = useToast();
+  const { t } = useI18n();
   const { selectedItem, containers, locations, editItem, removeItem } = useInventory();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
-  const [qtyText, setQtyText] = useState("1");
-  const [unit, setUnit] = useState("pcs");
+  const [expiryDate, setExpiryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [isImagePreviewVisible, setIsImagePreviewVisible] = useState(false);
 
   useEffect(() => {
     if (!selectedItem) return;
     setName(selectedItem.name);
     setCategory(selectedItem.category);
-    setQtyText(String(selectedItem.qty));
-    setUnit(selectedItem.unit);
+    setExpiryDate(selectedItem.expiryDate ?? "");
     setNotes(selectedItem.notes ?? "");
     setImageUri(selectedItem.imageUri);
   }, [selectedItem]);
@@ -35,31 +39,28 @@ export default function ItemDetailScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={{ padding: 16 }}>
-          <EmptyState title="No item selected" description="Open Home tab and tap an item card to view details." />
+          <EmptyState title={t("noItemSelected")} description={t("noItemSelectedDesc")} />
         </View>
       </SafeAreaView>
     );
   }
 
   const container = containers.find((entry) => entry.id === selectedItem.containerId);
-  const location = container ? locations.find((entry) => entry.id === container.locationId) : undefined;
-  const breadcrumb = [location?.name, container?.name].filter(Boolean).join(" > ");
-  const headerPath = breadcrumb ? `${breadcrumb} > ...` : "Unknown > ...";
 
   const onSaveEdit = () => {
     if (!name.trim()) {
-      Alert.alert("Missing name", "Please enter item name.");
+      Alert.alert(t("missingName"), t("enterItemName"));
       return;
     }
-    editItem(selectedItem.id, name, category, Number(qtyText) || 0, unit, notes, imageUri);
+    editItem(selectedItem.id, name, category, 1, "item", notes, expiryDate.trim() || undefined, imageUri);
     setIsEditing(false);
-    Alert.alert("Saved", "Item details updated.");
+    showToast(t("itemUpdated"), "success");
   };
 
-  const onPickImage = async () => {
+  const pickFromLibrary = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permission needed", "Please allow photo access to set item image.");
+      Alert.alert(t("permissionNeeded"), t("permissionPhotoDesc"));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -72,17 +73,47 @@ export default function ItemDetailScreen() {
       const { saveImageForItem } = await import("../src/services/imageService");
       const localImageUri = await saveImageForItem(selectedItem.id, result.assets[0].uri);
       setImageUri(localImageUri);
-      Alert.alert("Image updated", "Item photo saved locally.");
+      showToast(t("imageUpdated"), "success");
     } catch {
-      Alert.alert("Image error", "Could not save image. Please try again.");
+      Alert.alert(t("imageError"), t("imageErrorDesc"));
     }
   };
 
+  const pickFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t("cameraPermissionDenied"), t("cameraPermissionDesc"));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+      mediaTypes: ["images"],
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    try {
+      const { saveImageForItem } = await import("../src/services/imageService");
+      const localImageUri = await saveImageForItem(selectedItem.id, result.assets[0].uri);
+      setImageUri(localImageUri);
+      showToast(t("imageUpdated"), "success");
+    } catch {
+      Alert.alert(t("imageError"), t("imageErrorDesc"));
+    }
+  };
+
+  const onPickImage = () => {
+    Alert.alert(t("choosePhoto"), "Choose image source", [
+      { text: "Camera", onPress: () => void pickFromCamera() },
+      { text: "Album", onPress: () => void pickFromLibrary() },
+      { text: t("cancel"), style: "cancel" },
+    ]);
+  };
+
   const onDelete = () => {
-    Alert.alert("Delete item?", "This action cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("deleteItemConfirm"), t("deleteItemDesc"), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("deleteAction"),
         style: "destructive",
         onPress: () => {
           removeItem(selectedItem.id);
@@ -94,34 +125,68 @@ export default function ItemDetailScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <ChevronLeft color={colors.text} size={18} />
-            <Text style={{ color: colors.text, fontWeight: "700" }} onPress={() => router.back()}>
-              Back
-            </Text>
-            <Text style={{ color: colors.textMuted }}>{headerPath}</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
+        <FadeSlideIn delay={20}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, paddingRight: 8 }}
+            >
+              <ChevronLeft color={colors.text} size={20} />
+              <Text style={{ color: colors.text, fontWeight: "700" }}>
+                {t("back")}
+              </Text>
+            </Pressable>
+            <Pencil size={16} color={colors.accent} onPress={() => setIsEditing((value) => !value)} />
           </View>
-          <Pencil size={16} color="#1aa9c8" onPress={() => setIsEditing((value) => !value)} />
-        </View>
+        </FadeSlideIn>
 
-        <View
+        <FadeSlideIn delay={70} fromY={16}>
+          <View
           style={{
             marginTop: 16,
             backgroundColor: colors.surface,
-            borderRadius: 16,
+            borderRadius: 18,
             borderWidth: 1,
             borderColor: colors.border,
             padding: 14,
+            shadowColor: "#253a1b",
+            shadowOpacity: 0.11,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
           }}
         >
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={{ height: 160, borderRadius: 12, marginBottom: 12 }} resizeMode="cover" />
+            <Pressable onPress={() => setIsImagePreviewVisible(true)}>
+              <Image source={{ uri: imageUri }} style={{ height: 160, borderRadius: 12, marginBottom: 12 }} resizeMode="cover" />
+            </Pressable>
           ) : (
-            <View style={{ height: 160, borderRadius: 12, backgroundColor: "#dbe9f8", marginBottom: 12 }} />
+            <View
+              style={{
+                height: 160,
+                borderRadius: 12,
+                marginBottom: 12,
+                backgroundColor: colors.surfaceStrong,
+                borderWidth: 1,
+                borderColor: colors.border,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 40 }}>📦</Text>
+              <Text style={{ marginTop: 8, color: colors.primaryDark, fontWeight: "700" }}>{t("noPhotoYet")}</Text>
+            </View>
           )}
-          <Text style={{ color: "#1ca2c3", fontWeight: "700" }}>{breadcrumb || "Unknown path"}</Text>
+          <Text style={{ color: colors.accent, fontWeight: "700" }}>
+            {container?.name ?? t("uncategorized")}
+          </Text>
           {isEditing ? (
             <TextInput
               value={name}
@@ -144,49 +209,10 @@ export default function ItemDetailScreen() {
           )}
           <View style={{ marginTop: 12, gap: 7 }}>
             {isEditing ? (
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <TextInput
-                  value={qtyText}
-                  onChangeText={setQtyText}
-                  keyboardType="numeric"
-                  placeholder="Qty"
-                  placeholderTextColor={colors.textMuted}
-                  style={{
-                    width: 90,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: 10,
-                    backgroundColor: colors.surfaceSoft,
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    color: colors.text,
-                  }}
-                />
-                <TextInput
-                  value={unit}
-                  onChangeText={setUnit}
-                  placeholder="Unit"
-                  placeholderTextColor={colors.textMuted}
-                  style={{
-                    width: 100,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: 10,
-                    backgroundColor: colors.surfaceSoft,
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    color: colors.text,
-                  }}
-                />
-              </View>
-            ) : (
-              <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>Qty:</Text> {selectedItem.qty} {selectedItem.unit}</Text>
-            )}
-            {isEditing ? (
               <TextInput
                 value={category}
                 onChangeText={setCategory}
-                placeholder="Category"
+                placeholder={t("details")}
                 placeholderTextColor={colors.textMuted}
                 style={{
                   borderWidth: 1,
@@ -199,13 +225,30 @@ export default function ItemDetailScreen() {
                 }}
               />
             ) : (
-              <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>Category:</Text> {selectedItem.category}</Text>
+              <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>{t("details")}:</Text> {selectedItem.category || t("noNotes")}</Text>
             )}
-            <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>Barcode:</Text> {selectedItem.barcode ?? "N/A"}</Text>
-            <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>Expiry:</Text> {selectedItem.expiryDate ?? "N/A"}</Text>
-            <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>Container:</Text> {container?.name ?? "N/A"}</Text>
+            {isEditing ? (
+              <TextInput
+                value={expiryDate}
+                onChangeText={setExpiryDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textMuted}
+                style={{
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 10,
+                  backgroundColor: colors.surfaceSoft,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  color: colors.text,
+                }}
+              />
+            ) : null}
+            <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>{t("barcode")}:</Text> {selectedItem.barcode ?? t("na")}</Text>
+            <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>{t("expiryLabel")}</Text> {selectedItem.expiryDate ?? t("na")}</Text>
+            <Text style={{ color: colors.text }}><Text style={{ fontWeight: "800" }}>{t("containerLabel")}</Text> {container?.name ?? t("na")}</Text>
           </View>
-          <Text style={{ marginTop: 12, fontWeight: "800", color: colors.text }}>Notes:</Text>
+          <Text style={{ marginTop: 12, fontWeight: "800", color: colors.text }}>{t("notes")}</Text>
           {isEditing ? (
             <TextInput
               value={notes}
@@ -227,15 +270,48 @@ export default function ItemDetailScreen() {
               }}
             />
           ) : (
-            <Text style={{ marginTop: 3, color: colors.textMuted }}>{selectedItem.notes || "No notes added."}</Text>
+            <Text style={{ marginTop: 3, color: colors.textMuted }}>{selectedItem.notes || t("noNotes")}</Text>
           )}
           <View style={{ marginTop: 16, gap: 10 }}>
-            {isEditing ? <AppButton title="Choose Photo" variant="secondary" onPress={onPickImage} /> : null}
-            <AppButton title={isEditing ? "Save Details" : "Edit Details"} onPress={isEditing ? onSaveEdit : () => setIsEditing(true)} />
-            <AppButton title="Delete Item" variant="danger" onPress={onDelete} />
+            {isEditing ? <AppButton title={t("choosePhoto")} variant="secondary" onPress={onPickImage} /> : null}
+            <AppButton title={isEditing ? t("saveDetails") : t("editDetails")} onPress={isEditing ? onSaveEdit : () => setIsEditing(true)} />
+            <AppButton title={t("deleteItem")} variant="danger" onPress={onDelete} />
           </View>
-        </View>
+          </View>
+        </FadeSlideIn>
       </ScrollView>
+      </KeyboardAvoidingView>
+      <Modal
+        visible={isImagePreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsImagePreviewVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.9)",
+            justifyContent: "center",
+            paddingHorizontal: 14,
+          }}
+        >
+          <Pressable
+            style={{ position: "absolute", top: 56, right: 18, zIndex: 2 }}
+            onPress={() => setIsImagePreviewVisible(false)}
+          >
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>{t("cancel")}</Text>
+          </Pressable>
+          <Pressable style={{ flex: 1, justifyContent: "center" }} onPress={() => setIsImagePreviewVisible(false)}>
+            {imageUri ? (
+              <Image
+                source={{ uri: imageUri }}
+                resizeMode="contain"
+                style={{ width: "100%", height: "78%" }}
+              />
+            ) : null}
+          </Pressable>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
