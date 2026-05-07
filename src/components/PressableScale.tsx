@@ -7,9 +7,10 @@ import { motion } from "../theme/motion";
 
 type Props = PropsWithChildren<{
   onPress?: () => void;
+  scaleTo?: number;
 }>;
 
-export const PressableScale = ({ children, onPress }: Props) => {
+export const PressableScale = ({ children, onPress, scaleTo = motion.scale.tap }: Props) => {
   const scale = useRef(new Animated.Value(1)).current;
   const reducedMotionEnabled = useReducedMotion();
 
@@ -27,7 +28,7 @@ export const PressableScale = ({ children, onPress }: Props) => {
   };
 
   return (
-    <Pressable onPress={onPress} onPressIn={() => animateTo(motion.scale.tap)} onPressOut={() => animateTo(1)}>
+    <Pressable onPress={onPress} onPressIn={() => animateTo(scaleTo)} onPressOut={() => animateTo(1)}>
       <Animated.View style={{ transform: [{ scale }] }}>
         {children}
       </Animated.View>

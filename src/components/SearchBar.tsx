@@ -19,8 +19,13 @@ export const SearchBar = ({ value, onChangeText, placeholder = "Search..." }: Pr
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: 12,
+        borderRadius: 14,
         paddingHorizontal: 12,
+        shadowColor: "#2a4020",
+        shadowOpacity: 0.07,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 2,
       }}
     >
       <Search size={18} color={colors.textMuted} />
