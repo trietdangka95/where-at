@@ -92,9 +92,10 @@ export const useInventory = () => {
       category: string,
       qty: number,
       unit: string,
+      expiryDate?: string,
       imageUri?: string,
       itemId?: ID
-    ) => dispatch(addItem({ containerId, name, category, qty, unit, imageUri, itemId })),
+    ) => dispatch(addItem({ containerId, name, category, qty, unit, expiryDate, imageUri, itemId })),
     editLocation: (locationId: string, name: string) => dispatch(updateLocation({ locationId, name })),
     editContainer: (containerId: string, name: string, parentId?: string | null) =>
       dispatch(updateContainer({ containerId, name, parentId })),
@@ -105,8 +106,9 @@ export const useInventory = () => {
       qty: number,
       unit: string,
       notes?: string,
+      expiryDate?: string,
       imageUri?: string
-    ) => dispatch(updateItem({ itemId, name, category, qty, unit, notes, imageUri })),
+    ) => dispatch(updateItem({ itemId, name, category, qty, unit, notes, expiryDate, imageUri })),
     chooseItem: (itemId: string) => dispatch(selectItem({ itemId })),
     removeLocation: async (locationId: string) => {
       const containerIds = new Set(
