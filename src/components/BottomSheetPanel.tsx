@@ -66,12 +66,17 @@ const BottomSheetPanelInner = ({ visible, title, onClose, footer, children }: Pr
           transform: [{ translateY: sheetTranslateY }],
           marginTop: "auto",
           backgroundColor: colors.surface,
-          borderTopLeftRadius: 18,
-          borderTopRightRadius: 18,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
           borderWidth: 1,
           borderColor: colors.border,
           padding: 16,
           gap: 12,
+          shadowColor: "#22341a",
+          shadowOpacity: 0.16,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 8,
         }}
       >
         <View style={{ alignItems: "center" }}>
@@ -80,7 +85,7 @@ const BottomSheetPanelInner = ({ visible, title, onClose, footer, children }: Pr
               width: 44,
               height: 4,
               borderRadius: 999,
-              backgroundColor: "#d6deea",
+              backgroundColor: colors.surfaceStrong,
               marginBottom: 8,
             }}
           />
